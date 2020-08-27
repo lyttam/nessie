@@ -61,6 +61,7 @@ AWS_ACCESS_KEY_ID = 'key'
 AWS_APP_ROLE_ARN = 'aws:arn::<account>:role/<app_nessie_specific_role>'
 AWS_DMS_VPC_ROLE = 'dms vpc role'
 AWS_EDL_ROLE_ARN = 'edl cross-account role'
+AWS_LAMBDA_ROLE_ARN = 'aws lambda role'
 AWS_SECRET_ACCESS_KEY = 'secret'
 AWS_REGION = 'aws region'
 

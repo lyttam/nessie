@@ -25,6 +25,7 @@ ENHANCEMENTS, OR MODIFICATIONS.
 
 
 AWS_APP_ROLE_ARN = '<app_role_arn>'
+AWS_LAMBDA_ROLE_ARN = '<lambda_role_arn>'
 
 # Redshift connection parameters.
 

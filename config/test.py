@@ -26,6 +26,7 @@ ENHANCEMENTS, OR MODIFICATIONS.
 # The test environment mocks the Redshift interface with a local Postgres db.
 
 AWS_APP_ROLE_ARN = 'arn:aws:iam::123456789012:role/test-role'
+AWS_LAMBDA_ROLE_ARN = 'arn:aws:iam::123456789012:role/test-lambda-role'
 
 TESTING = True
 

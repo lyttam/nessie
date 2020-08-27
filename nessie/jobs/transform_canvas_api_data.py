@@ -25,12 +25,10 @@ ENHANCEMENTS, OR MODIFICATIONS.
 
 
 import json
-import tempfile
 
 from flask import current_app as app
-from nessie.externals import s3
+from nessie.externals import lambda_, s3
 from nessie.jobs.background_job import BackgroundJob
-from nessie.lib.util import get_s3_canvas_api_path
 
 
 """Logic for transforming Canvas API data into Spark-parsable JSON."""
@@ -38,31 +36,33 @@ from nessie.lib.util import get_s3_canvas_api_path
 
 class TransformCanvasApiData(BackgroundJob):
 
-    def run(self, datestamp=None):
+    def run(self, table_name, course_id_prefix):
         app.logger.info('Starting Canvas API data transform job...')
 
-        s3_source = get_s3_canvas_api_path()
-        s3_dest = get_s3_canvas_api_path(transformed=True)
+        dest_path = 'canvas-api/lambda/transformed-annetest'
+        source_prefix = f'canvas-api-data/incremental_annetest/{table_name}/{table_name}_{course_id_prefix}'
+        keys = s3.get_keys_with_prefix(source_prefix)
 
-        self.transform(f'{s3_source}/gradebook_history/gradebook_history', f'{s3_dest}/gradebook_history')
-        self.transform(f'{s3_source}/grade_change_log/grade_change_log', f'{s3_dest}/grade_change_log', key='events')
+        app.logger.info(f'Will invoke lambda on {len(keys)} objects from {source_prefix} and put results to {dest_path}.')
+        for key in keys:
+            self.invoke_transform(key, dest_path)
 
         return 'Canvas API data transform complete.'
 
-    def transform(self, s3_source, s3_dest, key=None):
-        objects = s3.get_keys_with_prefix(s3_source)
-        app.logger.info(f'Will transform {len(objects)} objects from {s3_source} and put results to {s3_dest}.')
-        skip_count = 0
-        for o in objects:
-            file_name = o.split('/')[-1]
-            if s3.object_exists(f'{s3_dest}/{file_name}'):
-                skip_count += 1
-                continue
-            canvas_api_data = s3.get_object_json(o).get(key) if key else s3.get_object_json(o)
-            with tempfile.TemporaryFile() as result:
-                course_id = int(file_name.split('_')[-2])
-                for record in canvas_api_data:
-                    record['course_id'] = course_id
-                    result.write(json.dumps(record).encode() + b'\n')
-                s3.upload_file(result, f'{s3_dest}/{file_name}')
-        app.logger.info(f'Transformed {len(objects) - skip_count} new objects; skipped {skip_count} existing objects.')
+    def invoke_transform(self, source_key, dest_path):
+        payload = {
+            'trigger': 'nessie',
+            'source': {
+                'bucket': app.config['LOCH_S3_BUCKET'],
+                'key': source_key,
+            },
+            'dest': {
+                'bucket': app.config['LRS_CANVAS_INCREMENTAL_TRANSIENT_BUCKET'],
+                'path': dest_path,
+            },
+        }
+        response = lambda_.invoke('canvas-api-transform', json.dumps(payload).encode())
+        if int(response.get('StatusCode')) >= 400:
+            app.logger.warn(f'Error response from lambda: {response}')
+        else:
+            app.logger.info(f'Lambda successfully invoked on {source_key}')

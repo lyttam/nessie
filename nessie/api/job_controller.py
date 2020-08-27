@@ -414,10 +414,10 @@ def migrate_lrs_incrementals():
     return respond_with_status(job_started)
 
 
-@app.route('/api/job/transform_canvas_api_data', methods=['POST'])
+@app.route('/api/job/transform_canvas_api_data/<table_name>/<course_id_prefix>', methods=['POST'])
 @auth_required
-def transform_canvas_api_data():
-    job_started = TransformCanvasApiData().run_async()
+def transform_canvas_api_data(table_name, course_id_prefix):
+    job_started = TransformCanvasApiData(table_name=table_name, course_id_prefix=course_id_prefix).run_async()
     return respond_with_status(job_started)
 
 
