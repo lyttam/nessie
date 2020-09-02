@@ -26,7 +26,7 @@ ENHANCEMENTS, OR MODIFICATIONS.
 from flask import current_app as app
 from nessie.externals import redshift
 from nessie.jobs.background_job import BackgroundJob, BackgroundJobError, verify_external_schema
-from nessie.lib.util import get_s3_canvas_api_path, resolve_sql_template
+from nessie.lib.util import resolve_sql_template
 
 """Logic for Canvas API schema creation job."""
 
@@ -36,16 +36,15 @@ class CreateCanvasApiSchema(BackgroundJob):
     def run(self):
         app.logger.info('Starting Canvas API schema creation job...')
         external_schema = app.config['REDSHIFT_SCHEMA_CANVAS_API']
-        s3_prefix = 's3://' + app.config['LOCH_S3_BUCKET'] + '/'
-        s3_canvas_api_data_url = s3_prefix + get_s3_canvas_api_path(transformed=True)
+        transient_s3_prefix = 's3://' + app.config['LRS_CANVAS_INCREMENTAL_TRANSIENT_BUCKET']
 
         redshift.drop_external_schema(external_schema)
         resolved_ddl = resolve_sql_template(
             'create_canvas_api_schema.template.sql',
-            loch_s3_canvas_api_data_path=s3_canvas_api_data_url,
+            s3_canvas_api_data_path=f'{transient_s3_prefix}/canvas-api/glue/annetest_transformed',
         )
         if redshift.execute_ddl_script(resolved_ddl):
-            verify_external_schema(external_schema, resolved_ddl)
+            # verify_external_schema(external_schema, resolved_ddl)
             return 'Canvas API schema creation job completed.'
         else:
             raise BackgroundJobError('Canvas API schema creation job failed.')

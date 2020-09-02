@@ -42,32 +42,43 @@ CREATE EXTERNAL TABLE {redshift_schema_canvas_api}.gradebook_history (
     course_id BIGINT,
     assignment_id BIGINT,
     assignment_name VARCHAR,
+    attempt INT,
     body TEXT,
-    current_grade INT,
+    cached_due_date TIMESTAMP,
+    current_grade VARCHAR,
     current_graded_at TIMESTAMP,
     current_grader VARCHAR,
+    entered_grade VARCHAR,
+    entered_score DOUBLE PRECISION,
+    excused BOOLEAN,
+    external_tool_url VARCHAR(MAX),
+    extra_attempts VARCHAR,
     grade_matches_current_submission BOOLEAN,
+    grade VARCHAR,
     graded_at TIMESTAMP,
-    grader VARCHAR,
     grader_id BIGINT,
-    new_grade VARCHAR,
-    new_graded_at TIMESTAMP,
-    new_grader VARCHAR,
-    previous_grade VARCHAR,
-    previous_graded_at TIMESTAMP,
-    previous_grader VARCHAR,
+    grader VARCHAR,
+    grading_period_id VARCHAR,
+    late_policy_status VARCHAR,
+    late BOOLEAN,
+    missing BOOLEAN,
+    points_deducted DOUBLE PRECISION,
+    posted_at TIMESTAMP,
+    preview_url VARCHAR(MAX),
     score DOUBLE PRECISION,
-    user_name VARCHAR,
+    seconds_late BIGINT,
     submission_type VARCHAR,
+    submitted_at TIMESTAMP,
     url VARCHAR,
     user_id BIGINT,
+    user_name VARCHAR,
     workflow_state VARCHAR
 )
 ROW FORMAT SERDE 'org.openx.data.jsonserde.JsonSerDe'
-LOCATION '{loch_s3_canvas_api_data_path}/gradebook_history';
+LOCATION '{s3_canvas_api_data_path}/gradebook_history';
 
 CREATE EXTERNAL TABLE {redshift_schema_canvas_api}.grade_change_log (
-    id VARCHAR,
+    id BIGINT,
     course_id BIGINT,
     created_at TIMESTAMP,
     event_type VARCHAR,
@@ -76,17 +87,16 @@ CREATE EXTERNAL TABLE {redshift_schema_canvas_api}.grade_change_log (
     grade_after VARCHAR,
     grade_before VARCHAR,
     graded_anonymously BOOLEAN,
-    version_number VARCHAR,
-    request_id VARCHAR,
-    links ARRAY <
-        STRUCT <
-            assignment:BIGINT,
-            course:BIGINT,
-            student:VARCHAR,
-            grader:VARCHAR,
-            page_view:VARCHAR
-        >
+    points_possible_after DOUBLE PRECISION,
+    points_possible_before DOUBLE PRECISION,
+    version_number INT,
+    links STRUCT <
+        assignment:BIGINT,
+        course:BIGINT,
+        student:VARCHAR,
+        grader:VARCHAR,
+        page_view:VARCHAR
     >
 )
 ROW FORMAT SERDE 'org.openx.data.jsonserde.JsonSerDe'
-LOCATION '{loch_s3_canvas_api_data_path}/grade_change_log';
+LOCATION '{s3_canvas_api_data_path}/grade_change_log';
