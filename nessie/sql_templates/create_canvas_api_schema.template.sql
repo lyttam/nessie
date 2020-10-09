@@ -90,13 +90,32 @@ CREATE EXTERNAL TABLE {redshift_schema_canvas_api}.grade_change_log (
     points_possible_after DOUBLE PRECISION,
     points_possible_before DOUBLE PRECISION,
     version_number INT,
-    links STRUCT <
-        assignment:BIGINT,
-        course:BIGINT,
-        student:VARCHAR,
-        grader:VARCHAR,
-        page_view:VARCHAR
-    >
+    links VARCHAR
 )
 ROW FORMAT SERDE 'org.openx.data.jsonserde.JsonSerDe'
 LOCATION '{s3_canvas_api_data_path}/grade_change_log';
+
+--------------------------------------------------------------------
+-- Internal schema
+--------------------------------------------------------------------
+
+DROP SCHEMA IF EXISTS {redshift_schema_canvas_api_internal} CASCADE;
+CREATE SCHEMA {redshift_schema_canvas_api_internal};
+
+--------------------------------------------------------------------
+-- Internal tables
+--------------------------------------------------------------------
+
+CREATE TABLE {redshift_schema_canvas_api_internal}.gradebook_history
+SORTKEY (course_id, assignment_id)
+AS (
+    SELECT
+        id, course_id, assignment_id, assignment_name,  attempt, body,
+        cached_due_date, current_grade, current_graded_at, current_grader,
+        entered_grade, entered_score, excused, external_tool_url, extra_attempts,
+        grade_matches_current_submission, grade, graded_at, grader_id, grader,
+        grading_period_id, late_policy_status, late, missing, points_deducted,
+        posted_at, preview_url, score, seconds_late, submission_type, submitted_at,
+        url, user_id, user_name, workflow_state
+    FROM {redshift_schema_canvas_api}.gradebook_history
+);

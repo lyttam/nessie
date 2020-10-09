@@ -40,9 +40,9 @@ class VerifyCanvasApiImport(BackgroundJob):
         app.logger.info('Starting Canvas API import verification job...')
         expected_courses = self.get_expected_courses()
 
-        # gradebook_history_result = self.verify_import('gradebook_history', self.get_imported_gradebook_history(), expected_courses)
+        gradebook_history_result = self.verify_import('gradebook_history', self.get_imported_gradebook_history(), expected_courses)
         #gradebook_history_result = self.verify_s3_gradebook_history(expected_courses)
-        gradebook_history_result = ''
+        # gradebook_history_result = ''
 
         grade_change_log_result = self.verify_import('grade_change_log', self.get_imported_grade_change_log(), expected_courses)
 
@@ -55,8 +55,8 @@ class VerifyCanvasApiImport(BackgroundJob):
             f"""SELECT course.canvas_id AS course_id, count(DISTINCT sub.assignment_id) AS assignment_count
             FROM {self.canvas_schema}.enrollment_term_dim term
             JOIN {self.canvas_schema}.course_dim course ON term.id = course.enrollment_term_id
-            LEFT JOIN {self.canvas_schema}.assignment_dim assign ON course.id = assign.course_id
-            LEFT JOIN {self.canvas_schema}.submission_dim sub
+            JOIN {self.canvas_schema}.assignment_dim assign ON course.id = assign.course_id
+            JOIN {self.canvas_schema}.submission_dim sub
               ON assign.id = sub.assignment_id
               AND sub.grade_state <> 'not_graded'
             WHERE term.name IN ('Spring 2020')
@@ -94,14 +94,16 @@ class VerifyCanvasApiImport(BackgroundJob):
         return self.get_imported_courses(
             f"""SELECT course_id, count(DISTINCT assignment_id) AS assignment_count
                 FROM {self.canvas_api_schema}.gradebook_history
-                GROUP BY course_id""",
+                GROUP BY course_id
+                ORDER BY course_id""",
         )
 
     def get_imported_grade_change_log(self):
         return self.get_imported_courses(
-            f"""SELECT course_id, count(DISTINCT links.assignment) AS assignment_count
+            f"""SELECT course_id, count(distinct json_extract_path_text(links, 'assignment')) AS assignment_count
                 FROM {self.canvas_api_schema}.grade_change_log
-                GROUP BY course_id""",
+                GROUP BY course_id
+                ORDER BY course_id""",
         )
 
     def get_imported_courses(self, query):
