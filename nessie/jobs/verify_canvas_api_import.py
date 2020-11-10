@@ -33,18 +33,19 @@ from nessie.lib.util import get_s3_canvas_api_path
 
 class VerifyCanvasApiImport(BackgroundJob):
 
-    canvas_schema = schema = app.config['REDSHIFT_SCHEMA_CANVAS']
-    canvas_api_schema = schema = app.config['REDSHIFT_SCHEMA_CANVAS_API']
+    canvas_schema = app.config['REDSHIFT_SCHEMA_CANVAS']
+    canvas_api_schema = app.config['REDSHIFT_SCHEMA_CANVAS_API_INTERNAL']
 
     def run(self):
         app.logger.info('Starting Canvas API import verification job...')
         expected_courses = self.get_expected_courses()
 
-        gradebook_history_result = self.verify_import('gradebook_history', self.get_imported_gradebook_history(), expected_courses)
-        #gradebook_history_result = self.verify_s3_gradebook_history(expected_courses)
+        gradebook_history_result = self.verify_import('gradebook_history', expected_courses)
+        # gradebook_history_result = self.verify_s3('gradebook_history', expected_courses)
         # gradebook_history_result = ''
 
-        grade_change_log_result = self.verify_import('grade_change_log', self.get_imported_grade_change_log(), expected_courses)
+        grade_change_log_result = self.verify_import('grade_change_log', expected_courses)
+        # grade_change_log_result = self.verify_s3('grade_change_log', expected_courses)
 
         return f"""Verified Canvas API imports for {len(expected_courses)} courses.
                 {gradebook_history_result}
@@ -65,13 +66,14 @@ class VerifyCanvasApiImport(BackgroundJob):
         )
         return {r['course_id']: r['assignment_count'] for r in results}
 
-    def verify_import(self, table_name, imported_courses, expected_courses):
+    def verify_import(self, table_name, expected_courses):
         app.logger.info(f'Verifying {table_name} assignment counts for {len(expected_courses)} courses.')
         result = {
             'success': [],
             'fail': [],
             'no_data': [],
         }
+        imported_courses = self.get_imported_courses(table_name)
         for course_id, expected_assignment_count in expected_courses.items():
             imported_assignment_count = imported_courses.get(course_id, 0)
             if expected_assignment_count == 0:
@@ -90,23 +92,11 @@ class VerifyCanvasApiImport(BackgroundJob):
             # self.audit_assignments(table_name, course_ids=result['fail'])
         return {table_name: {status: len(courses) for status, courses in result.items()}}
 
-    def get_imported_gradebook_history(self):
-        return self.get_imported_courses(
-            f"""SELECT course_id, count(DISTINCT assignment_id) AS assignment_count
-                FROM {self.canvas_api_schema}.gradebook_history
+    def get_imported_courses(self, table_name):
+        query = f"""SELECT course_id, count(DISTINCT assignment_id) AS assignment_count
+                FROM {self.canvas_api_schema}.{table_name}
                 GROUP BY course_id
-                ORDER BY course_id""",
-        )
-
-    def get_imported_grade_change_log(self):
-        return self.get_imported_courses(
-            f"""SELECT course_id, count(distinct json_extract_path_text(links, 'assignment')) AS assignment_count
-                FROM {self.canvas_api_schema}.grade_change_log
-                GROUP BY course_id
-                ORDER BY course_id""",
-        )
-
-    def get_imported_courses(self, query):
+                ORDER BY course_id"""
         results = redshift.fetch(query)
         return {r['course_id']: r['assignment_count'] for r in results}
 
@@ -114,7 +104,7 @@ class VerifyCanvasApiImport(BackgroundJob):
         app.logger.info(f'Investigating {table_name} assignment count mismatch for {len(course_ids)} courses.')
         results = {}
         for course_id in course_ids:
-            imported = self.get_imported_assignments(course_id)
+            imported = self.get_imported_assignments(table_name, course_id)
             expected = self.get_expected_assignments(course_id)
             missing = expected - imported
             extra = imported - expected
@@ -137,18 +127,18 @@ class VerifyCanvasApiImport(BackgroundJob):
         )
         return set([r['assignment_id'] for r in results])
 
-    def get_imported_assignments(self, course_id):
+    def get_imported_assignments(self, table_name, course_id):
         results = redshift.fetch(
-            f"""SELECT DISTINCT links.assignment AS assignment_id
-                FROM {self.canvas_api_schema}.grade_change_log
+            f"""SELECT DISTINCT assignment_id
+                FROM {self.canvas_api_schema}.{table_name}
                 WHERE course_id=%s""",
             params=(course_id,),
         )
         return set([int(r['assignment_id']) for r in results])
 
-    def verify_s3_gradebook_history(self, expected_courses):
-        app.logger.info(f'Verifying gradebook_history s3 keys for {len(expected_courses)} courses.')
-        s3_course_ids = self.get_s3_gradebook_history()
+    def verify_s3(self, table_name, expected_courses):
+        app.logger.info(f'Verifying {table_name} s3 keys for {len(expected_courses)} courses.')
+        s3_course_ids = self.get_s3_course_ids(table_name)
         result = {
             'success': [],
             'fail': [],
@@ -162,16 +152,17 @@ class VerifyCanvasApiImport(BackgroundJob):
             else:
                 result['fail'].append(str(course_id))
 
-        app.logger.info(f"""Verified gradebook_history S3 keys exist for {len(result['success'])} of {len(expected_courses)} courses.
+        app.logger.info(f"""Verified {table_name} S3 keys exist for {len(result['success'])} of {len(expected_courses)} courses.
                         {len(result['no_data'])} courses have no graded assignments.
                         Missing S3 keys for {len(result['fail'])} courses.""")
         if len(result['fail']):
             failed_course_ids = ','.join(result['fail'])
-            app.logger.warn(f'Failed to import gradebook_history for course IDs {failed_course_ids}')
-        return {'gradebook_history': {status: len(courses) for status, courses in result.items()}}
+            app.logger.warn(f'Failed to import {table_name} for course IDs {failed_course_ids}')
+        return {table_name: {status: len(courses) for status, courses in result.items()}}
 
-    def get_s3_gradebook_history(self):
-        s3_keys = s3.get_keys_with_prefix(f'{get_s3_canvas_api_path()}/gradebook_history/gradebook_history')
+    def get_s3_course_ids(self, table_name):
+        # s3_keys = s3.get_keys_with_prefix(f'{get_s3_canvas_api_path()}/gradebook_history/gradebook_history')
+        s3_keys = s3.get_keys_with_prefix(f'canvas-api/lambda/transformed/{table_name}/{table_name}', bucket='la-nessie-transient')
         course_ids = []
         for key in s3_keys:
             file_name = key.split('/')[-1]

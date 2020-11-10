@@ -41,7 +41,7 @@ class CreateCanvasApiSchema(BackgroundJob):
         redshift.drop_external_schema(external_schema)
         resolved_ddl = resolve_sql_template(
             'create_canvas_api_schema.template.sql',
-            s3_canvas_api_data_path=f'{transient_s3_prefix}/canvas-api/glue/transformed',
+            s3_canvas_api_data_path=f'{transient_s3_prefix}/canvas-api/glue/2020-11-06/transformed',
         )
         if redshift.execute_ddl_script(resolved_ddl):
             # verify_external_schema(external_schema, resolved_ddl)

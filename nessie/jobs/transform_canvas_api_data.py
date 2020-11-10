@@ -39,8 +39,8 @@ class TransformCanvasApiData(BackgroundJob):
     def run(self, table_name, course_id_prefix):
         app.logger.info('Starting Canvas API data transform job...')
 
-        dest_path = 'canvas-api/lambda/transformed-annetest'
-        source_prefix = f'canvas-api-data/incremental_annetest/{table_name}/{table_name}_{course_id_prefix}'
+        dest_path = 'canvas-api/lambda/transformed'
+        source_prefix = f'canvas-api-data/incremental-annetest/{table_name}/{table_name}_{course_id_prefix}'
         keys = s3.get_keys_with_prefix(source_prefix)
 
         app.logger.info(f'Will invoke lambda on {len(keys)} objects from {source_prefix} and put results to {dest_path}.')
