@@ -59,7 +59,7 @@ class VerifyCanvasApiImport(BackgroundJob):
             JOIN {self.canvas_schema}.assignment_dim assign ON course.id = assign.course_id
             JOIN {self.canvas_schema}.submission_dim sub
               ON assign.id = sub.assignment_id
-              AND sub.grade_state <> 'not_graded'
+              AND sub.graded_at IS NOT NULL
             WHERE term.name IN ('Spring 2020')
             GROUP BY course.canvas_id
             ORDER BY course.canvas_id""",
@@ -71,25 +71,21 @@ class VerifyCanvasApiImport(BackgroundJob):
         result = {
             'success': [],
             'fail': [],
-            'no_data': [],
         }
         imported_courses = self.get_imported_courses(table_name)
         for course_id, expected_assignment_count in expected_courses.items():
             imported_assignment_count = imported_courses.get(course_id, 0)
-            if expected_assignment_count == 0:
-                result['no_data'].append(str(course_id))
-            elif imported_assignment_count >= expected_assignment_count:
+            if imported_assignment_count == expected_assignment_count:
                 result['success'].append(str(course_id))
             else:
                 result['fail'].append(str(course_id))
 
-        app.logger.info(f"""Verified {table_name} import is complete for {len(result['success'])} of {len(expected_courses)} courses.
-                        {len(result['no_data'])} courses have no graded assignments.
-                        Missing data for {len(result['fail'])} courses.""")
+        app.logger.info(f"""Verified {table_name} assignment counts for {len(result['success'])} of {len(expected_courses)} courses.
+                        Found assignment count mismatch for {len(result['fail'])} courses.""")
         if len(result['fail']):
             failed_course_ids = ','.join(result['fail'])
             app.logger.warn(f"""{table_name} assignment counts do not match for courses {failed_course_ids}""")
-            # self.audit_assignments(table_name, course_ids=result['fail'])
+            self.audit_assignments(table_name, course_ids=result['fail'])
         return {table_name: {status: len(courses) for status, courses in result.items()}}
 
     def get_imported_courses(self, table_name):
